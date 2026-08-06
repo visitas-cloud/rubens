@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
+<title>Rota Leste · Lojas Parceiras</title>
+<meta name="description" content="Mapa de lojas e rotas diárias para equipe externa - Zona Leste São Paulo">
+<meta name="theme-color" content="#0D2C54">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><rect width=%22100%22 height=%22100%22 rx=%2222%22 fill=%22%230D2C54%22/><circle cx=%2232%22 cy=%2258%22 r=%2210%22 fill=%22%2334C77B%22/><circle cx=%2268%22 cy=%2258%22 r=%2210%22 fill=%22%2334C77B%22/><path d=%22M28 58 L28 40 Q28 30 40 30 L60 30 Q72 30 72 40 L72 58%22 stroke=%22white%22 stroke-width=%226%22 fill=%22none%22/></svg>">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<header class="topbar">
+  <div class="brand">
+    <span class="brand-mark" aria-hidden="true">
+      <svg viewBox="0 0 40 40"><circle cx="12" cy="26" r="4.5" fill="#34C77B"/><circle cx="28" cy="26" r="4.5" fill="#34C77B"/><path d="M10 26 L10 15 Q10 9 16 9 L24 9 Q30 9 30 15 L30 26" stroke="#fff" stroke-width="2.6" fill="none" stroke-linecap="round"/></svg>
+    </span>
+    <div class="brand-text">
+      <strong>Rota Leste</strong>
+      <span>Malha de lojas &middot; equipe externa</span>
+    </div>
+  </div>
+  <button id="btn-help" class="icon-btn" aria-label="Como usar">?</button>
+</header>
+
+<nav class="tabbar" role="tablist" aria-label="Modo de visualização">
+  <button class="tab active" data-view="map" role="tab" aria-selected="true">Mapa</button>
+  <button class="tab" data-view="metro" role="tab" aria-selected="false">Linhas</button>
+  <button class="tab" data-view="list" role="tab" aria-selected="false">Lojas</button>
+</nav>
+
+<main>
+  <!-- MAP VIEW -->
+  <section id="view-map" class="view active">
+    <div id="leaflet-map"></div>
+    <div class="map-legend" id="map-legend"></div>
+  </section>
+
+  <!-- METRO / LINE VIEW -->
+  <section id="view-metro" class="view">
+    <div class="metro-wrap" id="metro-wrap">
+      <div class="metro-intro">
+        <p>Cada linha agrupa lojas próximas para uma rota de visita por dia da semana &mdash; como uma linha de metrô, cada estação é uma loja.</p>
+      </div>
+      <div id="metro-svg-holder"></div>
+    </div>
+  </section>
+
+  <!-- LIST VIEW -->
+  <section id="view-list" class="view">
+    <div class="list-toolbar">
+      <input type="search" id="search-input" placeholder="Buscar loja, bairro ou endereço...">
+      <div class="chip-row" id="linha-filters"></div>
+    </div>
+    <div id="store-list" class="store-list"></div>
+  </section>
+</main>
+
+<!-- FLOATING ROUTE BAR -->
+<div class="route-bar" id="route-bar">
+  <div class="route-bar-info">
+    <span id="route-bar-count">0 lojas selecionadas</span>
+  </div>
+  <div class="route-bar-actions">
+    <button id="route-clear" class="ghost-btn">Limpar</button>
+    <button id="route-go" class="primary-btn">Abrir rota no Maps</button>
+  </div>
+</div>
+
+<!-- STORE DETAIL SHEET -->
+<div class="sheet-backdrop" id="sheet-backdrop"></div>
+<div class="sheet" id="store-sheet">
+  <div class="sheet-handle"></div>
+  <div id="sheet-content"></div>
+</div>
+
+<!-- HELP SHEET -->
+<div class="sheet-backdrop" id="help-backdrop"></div>
+<div class="sheet" id="help-sheet">
+  <div class="sheet-handle"></div>
+  <div class="sheet-body">
+    <h3>Como usar</h3>
+    <ul class="help-list">
+      <li><strong>Mapa</strong> mostra todas as lojas geolocalizadas por bairro, coloridas por linha/dia de visita.</li>
+      <li><strong>Linhas</strong> é a versão ilustrada estilo metrô: cada linha colorida é uma rota sugerida para um dia da semana.</li>
+      <li><strong>Lojas</strong> lista todas as lojas com busca e filtro. Toque numa loja para ver detalhes e endereço completo.</li>
+      <li>Marque o checkbox <strong>“+ rota”</strong> em várias lojas (ou toque em <strong>“Usar linha inteira”</strong>) e depois em <strong>Abrir rota no Maps</strong> para navegar parada a parada, direto do celular.</li>
+      <li>As posições no mapa são aproximadas (nível de bairro); a navegação usa o endereço completo e exato de cada loja.</li>
+    </ul>
+    <button class="primary-btn" id="help-close">Entendi</button>
+  </div>
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+<script src="data.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
