@@ -103,12 +103,13 @@ main{ position:absolute; top:104px; left:0; right:0; bottom:0; }
 
 /* ---------- Metro view ---------- */
 .metro-wrap{ height:100%; overflow:auto; -webkit-overflow-scrolling:touch; background:#fff; }
-.metro-intro{ padding:14px 16px 4px; font-size:13px; color:var(--ink-soft); }
-#metro-svg-holder{ padding: 4px 4px 40px; }
+#metro-svg-holder{ padding: 16px 14px 40px; max-width:420px; margin:0 auto; }
+.metro-group{ margin-bottom:22px; padding-bottom:14px; border-bottom:1px solid var(--line); }
+.metro-group:last-child{ border-bottom:none; }
 #metro-svg-holder svg{ width:100%; height:auto; display:block; }
-.metro-station-label{ font-size:11.5px; fill:var(--ink); font-family:inherit; font-weight:600;}
+.metro-station-label{ font-size:12px; fill:var(--ink); font-family:inherit; font-weight:700;}
 .metro-station-sub{ font-size:9.5px; fill:var(--ink-soft); font-family:inherit; }
-.metro-line-title{ font-size:13px; font-weight:800; font-family:inherit; }
+.metro-line-title{ font-size:15px; font-weight:800; font-family:inherit; }
 .metro-day{ font-size:10.5px; font-family:inherit; font-weight:600; opacity:.85; }
 
 /* ---------- List view ---------- */
