@@ -83,51 +83,29 @@
   }
 
   // ==========================================================
-  // METRO / LINE DIAGRAM (SVG) — one vertical line per bairro, stations = lojas
-  // Cor por bairro: quanto mais lojas, mais próximo do azul-marinho (cor principal);
-  // os demais bairros recebem cores distintas (laranja, roxo, verde, etc.)
+  // REGIÃO — uma linha vertical por região/dia da semana, estações = lojas
+  // Cores iguais às usadas no mapa (mesma região = mesma cor)
   // ==========================================================
-  function bairroColor(rank, total){
-    if(rank === 0) return "#0D2C54"; // bairro com mais lojas: azul-marinho (cor da marca)
-    // paleta com boa separação visual, evitando tons parecidos com o azul-marinho e o verde de fundo
-    const palette = [
-      "#E8871E", "#6C3FA0", "#1B8A5A", "#C0392B", "#0E7C86",
-      "#B8860B", "#8E4585", "#2E6F40", "#A24936", "#3D5A80",
-      "#946B2D", "#5B4E77", "#B5482F", "#276678", "#7A5C2E",
-      "#9C3D54", "#3E6259", "#7E7B15", "#5C3D8C", "#A85751",
-      "#436E4F", "#8A3B2B", "#4A5D77", "#7D5A44", "#9A6324"
-    ];
-    return palette[(rank - 1) % palette.length];
-  }
-
   function buildMetroSVG(){
-    // agrupa lojas por bairro e ordena do bairro com mais lojas para o com menos
-    const byBairro = {};
-    LOJAS.forEach(l => {
-      if(!byBairro[l.bairro]) byBairro[l.bairro] = [];
-      byBairro[l.bairro].push(l);
-    });
-    const bairros = Object.keys(byBairro).sort((a,b) => byBairro[b].length - byBairro[a].length);
-
+    const linhaIds = Object.keys(LINHAS).map(Number).sort((a,b)=>a-b);
     const holder = document.getElementById("metro-svg-holder");
     holder.innerHTML = "";
 
-    bairros.forEach((bairro, rank) => {
-      const color = bairroColor(rank, bairros.length);
-      const stations = byBairro[bairro].slice().sort((a,b)=> (b.gravamesMercado||0) - (a.gravamesMercado||0));
+    linhaIds.forEach(lid => {
+      const color = linhaColor(lid);
+      const stations = LOJAS.filter(l => l.linha === lid).sort((a,b)=>a.ordemRota-b.ordemRota);
 
       const width = 360;
       const stationGap = 74;
-      const topPad = 46;
+      const topPad = 50;
       const bottomPad = 20;
       const railX = 34;
       const height = topPad + (stations.length - 1) * stationGap + bottomPad;
 
       let svg = `<svg viewBox="0 0 ${width} ${height}" xmlns="http://www.w3.org/2000/svg" font-family="inherit">`;
-      svg += `<text x="0" y="20" class="metro-line-title" fill="${color}">${bairro}</text>`;
-      svg += `<text x="0" y="36" class="metro-day" fill="${color}">${stations.length} ${stations.length===1 ? "loja" : "lojas"}</text>`;
+      svg += `<text x="0" y="20" class="metro-day" fill="${color}">${linhaDia(lid)}</text>`;
+      svg += `<text x="0" y="40" class="metro-line-title" fill="${color}">${linhaNome(lid)}</text>`;
 
-      // trilho vertical
       const railTop = topPad;
       const railBottom = topPad + (stations.length - 1) * stationGap;
       svg += `<line x1="${railX}" y1="${railTop}" x2="${railX}" y2="${railBottom}" stroke="${color}" stroke-width="7" stroke-linecap="round"/>`;
@@ -263,7 +241,8 @@
       <div class="sheet-addr">${loja.enderecoCompleto}</div>
       <div class="sheet-grid">
         <div class="stat-box"><div class="k">Porte</div><div class="v">${loja.porte || "—"}</div></div>
-        <div class="stat-box"><div class="k">${linhaNome(loja.linha)}</div><div class="v">${linhaDia(loja.linha)}</div></div>
+        <div class="stat-box"><div class="k">Dia da rota</div><div class="v">${linhaDia(loja.linha)}</div></div>
+        <div class="stat-box"><div class="k">Região</div><div class="v">${linhaNome(loja.linha)}</div></div>
         <div class="stat-box"><div class="k">Gravames no mercado</div><div class="v">${loja.gravamesMercado}</div></div>
         <div class="stat-box"><div class="k">Potencial CB</div><div class="v">${loja.potencialCB}</div></div>
       </div>
