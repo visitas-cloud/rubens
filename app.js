@@ -83,49 +83,73 @@
   }
 
   // ==========================================================
-  // METRO / LINE DIAGRAM (SVG) — one line per row, stations = lojas
+  // METRO / LINE DIAGRAM (SVG) — one vertical line per bairro, stations = lojas
+  // Cor por bairro: quanto mais lojas, mais próximo do azul-marinho (cor principal);
+  // os demais bairros recebem cores distintas (laranja, roxo, verde, etc.)
   // ==========================================================
+  function bairroColor(rank, total){
+    if(rank === 0) return "#0D2C54"; // bairro com mais lojas: azul-marinho (cor da marca)
+    // paleta com boa separação visual, evitando tons parecidos com o azul-marinho e o verde de fundo
+    const palette = [
+      "#E8871E", "#6C3FA0", "#1B8A5A", "#C0392B", "#0E7C86",
+      "#B8860B", "#8E4585", "#2E6F40", "#A24936", "#3D5A80",
+      "#946B2D", "#5B4E77", "#B5482F", "#276678", "#7A5C2E",
+      "#9C3D54", "#3E6259", "#7E7B15", "#5C3D8C", "#A85751",
+      "#436E4F", "#8A3B2B", "#4A5D77", "#7D5A44", "#9A6324"
+    ];
+    return palette[(rank - 1) % palette.length];
+  }
+
   function buildMetroSVG(){
-    const linhaIds = Object.keys(LINHAS).map(Number).sort((a,b)=>a-b);
-    const rowH = 150;
-    const width = 1000;
-    const stationGap = 92;
-    const marginLeft = 130;
-    const height = linhaIds.length * rowH + 40;
+    // agrupa lojas por bairro e ordena do bairro com mais lojas para o com menos
+    const byBairro = {};
+    LOJAS.forEach(l => {
+      if(!byBairro[l.bairro]) byBairro[l.bairro] = [];
+      byBairro[l.bairro].push(l);
+    });
+    const bairros = Object.keys(byBairro).sort((a,b) => byBairro[b].length - byBairro[a].length);
 
-    let svg = `<svg viewBox="0 0 ${width} ${height}" xmlns="http://www.w3.org/2000/svg" font-family="inherit">`;
-    svg += `<rect x="0" y="0" width="${width}" height="${height}" fill="#ffffff"/>`;
+    const holder = document.getElementById("metro-svg-holder");
+    holder.innerHTML = "";
 
-    linhaIds.forEach((lid, rowIdx) => {
-      const y = 60 + rowIdx * rowH;
-      const color = linhaColor(lid);
-      const stations = LOJAS.filter(l => l.linha === lid).sort((a,b)=>a.ordemRota-b.ordemRota);
-      const lineEndX = marginLeft + (stations.length-1) * stationGap + 40;
+    bairros.forEach((bairro, rank) => {
+      const color = bairroColor(rank, bairros.length);
+      const stations = byBairro[bairro].slice().sort((a,b)=> (b.gravamesMercado||0) - (a.gravamesMercado||0));
 
-      // line title
-      svg += `<text x="18" y="${y-28}" class="metro-line-title" fill="${color}">${linhaNome(lid)}</text>`;
-      svg += `<text x="18" y="${y-12}" class="metro-day" fill="${color}">${linhaDia(lid)} · ${stations.length} lojas</text>`;
+      const width = 360;
+      const stationGap = 74;
+      const topPad = 46;
+      const bottomPad = 20;
+      const railX = 34;
+      const height = topPad + (stations.length - 1) * stationGap + bottomPad;
 
-      // rail
-      svg += `<line x1="${marginLeft}" y1="${y}" x2="${lineEndX}" y2="${y}" stroke="${color}" stroke-width="7" stroke-linecap="round"/>`;
+      let svg = `<svg viewBox="0 0 ${width} ${height}" xmlns="http://www.w3.org/2000/svg" font-family="inherit">`;
+      svg += `<text x="0" y="20" class="metro-line-title" fill="${color}">${bairro}</text>`;
+      svg += `<text x="0" y="36" class="metro-day" fill="${color}">${stations.length} ${stations.length===1 ? "loja" : "lojas"}</text>`;
+
+      // trilho vertical
+      const railTop = topPad;
+      const railBottom = topPad + (stations.length - 1) * stationGap;
+      svg += `<line x1="${railX}" y1="${railTop}" x2="${railX}" y2="${railBottom}" stroke="${color}" stroke-width="7" stroke-linecap="round"/>`;
 
       stations.forEach((s, i) => {
-        const x = marginLeft + i * stationGap;
-        const r = 8 + Math.min(s.gravamesMercado||0, 20) * 0.35; // bigger = more concentração de gravames
-        svg += `<circle cx="${x}" cy="${y}" r="${r}" fill="#ffffff" stroke="${color}" stroke-width="5" data-store="${s.id}" class="metro-station" style="cursor:pointer"/>`;
-        // label alternating above/below to avoid overlap
-        const above = i % 2 === 0;
-        const labelY = above ? y - 16 : y + 26;
-        const subY = above ? y - 4 : y + 38;
-        const shortName = s.nome.length > 16 ? s.nome.slice(0,15)+"…" : s.nome;
-        svg += `<text x="${x}" y="${labelY}" text-anchor="middle" class="metro-station-label" data-store="${s.id}" style="cursor:pointer">${shortName}</text>`;
-        svg += `<text x="${x}" y="${subY}" text-anchor="middle" class="metro-station-sub">${s.bairro}</text>`;
+        const y = topPad + i * stationGap;
+        const r = 8 + Math.min(s.gravamesMercado||0, 20) * 0.35;
+        svg += `<circle cx="${railX}" cy="${y}" r="${r}" fill="#ffffff" stroke="${color}" stroke-width="5" data-store="${s.id}" class="metro-station" style="cursor:pointer"/>`;
+        const textX = railX + 26;
+        const shortName = s.nome.length > 30 ? s.nome.slice(0,29)+"…" : s.nome;
+        svg += `<text x="${textX}" y="${y-4}" class="metro-station-label" data-store="${s.id}" style="cursor:pointer">${shortName}</text>`;
+        svg += `<text x="${textX}" y="${y+13}" class="metro-station-sub">${s.endereco}</text>`;
       });
+
+      svg += `</svg>`;
+
+      const group = document.createElement("div");
+      group.className = "metro-group";
+      group.innerHTML = svg;
+      holder.appendChild(group);
     });
 
-    svg += `</svg>`;
-    const holder = document.getElementById("metro-svg-holder");
-    holder.innerHTML = svg;
     holder.querySelectorAll("[data-store]").forEach(el => {
       el.addEventListener("click", () => openSheet(el.getAttribute("data-store")));
     });
