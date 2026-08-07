@@ -97,13 +97,13 @@
 
       const width = 360;
       const stationGap = 74;
-      const topPad = 50;
+      const topPad = 70;
       const bottomPad = 20;
       const railX = 34;
       const height = topPad + (stations.length - 1) * stationGap + bottomPad;
 
       let svg = `<svg viewBox="0 0 ${width} ${height}" xmlns="http://www.w3.org/2000/svg" font-family="inherit">`;
-      svg += `<text x="0" y="20" class="metro-day" fill="${color}">${linhaDia(lid)}</text>`;
+      svg += `<text x="0" y="18" class="metro-day" fill="${color}">${linhaDia(lid)}</text>`;
       svg += `<text x="0" y="40" class="metro-line-title" fill="${color}">${linhaNome(lid)}</text>`;
 
       const railTop = topPad;
@@ -157,38 +157,59 @@
     });
   }
 
-  function filteredLojas(){
-    return LOJAS.filter(l => {
-      if(activeLinhaFilter !== "all" && String(l.linha) !== String(activeLinhaFilter)) return false;
-      if(!searchTerm) return true;
-      const hay = (l.nome + " " + l.bairro + " " + l.endereco).toLowerCase();
-      return hay.includes(searchTerm);
-    }).sort((a,b) => a.linha - b.linha || a.ordemRota - b.ordemRota);
-  }
-
   function renderList(){
     const list = document.getElementById("store-list");
-    const items = filteredLojas();
     list.innerHTML = "";
-    if(items.length === 0){
+
+    const linhaIds = Object.keys(LINHAS).map(Number).sort((a,b)=>a-b)
+      .filter(lid => activeLinhaFilter === "all" || String(lid) === String(activeLinhaFilter));
+
+    let anyResults = false;
+
+    linhaIds.forEach(lid => {
+      const items = LOJAS.filter(l => {
+        if(l.linha !== lid) return false;
+        if(!searchTerm) return true;
+        const hay = (l.nome + " " + l.bairro + " " + l.endereco).toLowerCase();
+        return hay.includes(searchTerm);
+      }).sort((a,b) => a.ordemRota - b.ordemRota);
+
+      if(items.length === 0) return;
+      anyResults = true;
+
+      const section = document.createElement("div");
+      section.className = "list-section";
+      const color = linhaColor(lid);
+      section.innerHTML = `
+        <div class="list-section-header" style="border-left-color:${color}">
+          <span class="list-section-day">${linhaDia(lid)}</span>
+          <span class="list-section-name" style="color:${color}">${linhaNome(lid)}</span>
+          <span class="list-section-count">${items.length} ${items.length===1?"loja":"lojas"}</span>
+        </div>`;
+      const cardsWrap = document.createElement("div");
+      items.forEach(loja => {
+        const card = document.createElement("div");
+        card.className = "store-card";
+        card.innerHTML = `
+          <div class="route-check ${selected.has(loja.id) ? "checked":""}" data-check="${loja.id}">${selected.has(loja.id)?"✓":"+"}</div>
+          <div class="store-card-main" data-open="${loja.id}">
+            <div class="store-card-name">${loja.nome}</div>
+            <div class="store-card-addr">${loja.endereco} · ${loja.bairro}</div>
+            <div class="store-card-tags">
+              <span class="tag">${loja.porte || ""}</span>
+            </div>
+          </div>`;
+        cardsWrap.appendChild(card);
+      });
+      section.appendChild(cardsWrap);
+      list.appendChild(section);
+    });
+
+    if(!anyResults){
       list.innerHTML = '<div style="padding:24px;text-align:center;color:var(--ink-soft);font-size:13px;">Nenhuma loja encontrada.</div>';
       return;
     }
-    items.forEach(loja => {
-      const card = document.createElement("div");
-      card.className = "store-card";
-      card.innerHTML = `
-        <div class="route-check ${selected.has(loja.id) ? "checked":""}" data-check="${loja.id}">${selected.has(loja.id)?"✓":"+"}</div>
-        <div class="store-card-main" data-open="${loja.id}">
-          <div class="store-card-name">${loja.nome}</div>
-          <div class="store-card-addr">${loja.endereco} · ${loja.bairro}</div>
-          <div class="store-card-tags">
-            <span class="tag navy" style="background:${linhaColor(loja.linha)}22;color:${linhaColor(loja.linha)}">${linhaNome(loja.linha)}</span>
-            <span class="tag">${loja.porte || ""}</span>
-          </div>
-        </div>`;
-      list.appendChild(card);
-    });
+
     list.querySelectorAll("[data-open]").forEach(el => el.addEventListener("click", () => openSheet(el.getAttribute("data-open"))));
     list.querySelectorAll("[data-check]").forEach(el => el.addEventListener("click", (e) => {
       e.stopPropagation();
