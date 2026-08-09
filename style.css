@@ -140,7 +140,24 @@ main{ position:absolute; top:104px; left:0; right:0; bottom:0; }
 .store-card{
   display:flex; align-items:flex-start; gap:10px;
   padding:12px 14px; border-bottom:1px solid var(--line);
+  position:relative;
 }
+.move-btn{
+  flex-shrink:0; width:30px; height:30px; border-radius:8px; border:1px solid var(--line);
+  background:#fff; color:var(--navy); font-size:14px; font-weight:700; margin-top:2px;
+}
+.move-popover{
+  position:absolute; right:10px; top:44px; z-index:30; background:#fff; border-radius:10px;
+  box-shadow: var(--shadow); padding:10px; width:220px; border:1px solid var(--line);
+}
+.move-popover-title{ font-size:11px; font-weight:700; color:var(--ink-soft); margin-bottom:6px; text-transform:uppercase; letter-spacing:.3px; }
+.region-select{
+  width:100%; padding:9px 8px; border-radius:8px; border:1px solid var(--line);
+  background: var(--mist); font-size:13px; color:var(--ink); font-family:inherit;
+}
+.move-field{ margin-top:4px; }
+.move-field label{ display:block; font-size:11.5px; font-weight:700; color:var(--ink-soft); margin-bottom:6px; }
+.offline-note{ margin-top:10px; font-size:11px; color:#B23A2E; background:#FBEAE7; border-radius:8px; padding:8px 10px; }
 .store-card-main{ flex:1; }
 .store-card-name{ font-weight:700; font-size:14px; color:var(--navy); }
 .store-card-addr{ font-size:12.5px; color:var(--ink-soft); margin-top:2px; }

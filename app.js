@@ -1,13 +1,76 @@
 (function(){
   "use strict";
-  const DATA = APP_DATA;
-  const LOJAS = DATA.lojas;
-  const LINHAS = DATA.linhas;
 
-  // ---------- state ----------
+  // ---------- state (mutable — populated from Supabase or fallback) ----------
+  let LOJAS = [];
+  let LINHAS = {};
+  let usingSupabase = false;
+  let supabase = null;
+
   const selected = new Set();      // ids selected for custom route
   let activeLinhaFilter = "all";
   let searchTerm = "";
+
+  // ---------- Supabase / data loading ----------
+  async function loadData(){
+    const cfg = window.SUPABASE_CONFIG || {};
+    if(cfg.url && cfg.anonKey && window.supabase){
+      try{
+        supabase = window.supabase.createClient(cfg.url, cfg.anonKey);
+        const [{data: regioes, error: e1}, {data: lojas, error: e2}] = await Promise.all([
+          supabase.from("regioes").select("*").order("ordem"),
+          supabase.from("lojas").select("*")
+        ]);
+        if(e1 || e2) throw (e1 || e2);
+        if(regioes && regioes.length && lojas && lojas.length){
+          LINHAS = {};
+          regioes.forEach(r => { LINHAS[r.id] = { nome: r.nome, cor: r.cor, dia: r.dia }; });
+          LOJAS = lojas.map(l => ({
+            id: l.id, nome: l.nome, cnpj: l.cnpj, endereco: l.endereco, bairro: l.bairro,
+            cidade: l.cidade, uf: l.uf, cep: l.cep, enderecoCompleto: l.endereco_completo,
+            porte: l.porte, gravamesMercado: l.gravames_mercado, potencialCB: l.potencial_cb,
+            zona: l.zona, lat: l.lat, lng: l.lng, linha: l.linha, ordemRota: l.ordem_rota
+          }));
+          usingSupabase = true;
+          return;
+        }
+      }catch(err){
+        console.warn("Supabase indisponível, usando dados locais.", err);
+      }
+    }
+    // fallback: dados locais embutidos (data.js)
+    LINHAS = FALLBACK_DATA.linhas;
+    LOJAS = FALLBACK_DATA.lojas;
+    usingSupabase = false;
+  }
+
+  // ---------- ping (mantém o projeto Supabase free ativo, sem pausar) ----------
+  async function pingSupabase(){
+    if(!usingSupabase || !supabase) return;
+    try{
+      await supabase.from("app_ping").update({ last_ping: new Date().toISOString() }).eq("id", 1);
+    }catch(err){
+      console.warn("Ping ao Supabase falhou (não crítico):", err);
+    }
+  }
+
+  async function moveStoreToLinha(storeId, newLinhaId){
+    const loja = byId(storeId);
+    if(!loja) return;
+    loja.linha = newLinhaId;
+    if(usingSupabase && supabase){
+      const { error } = await supabase.from("lojas").update({ linha: newLinhaId }).eq("id", storeId);
+      if(error){ console.error(error); alert("Não foi possível salvar no Supabase. A mudança foi aplicada só nesta tela."); }
+    }
+    refreshAll();
+  }
+
+  function refreshAll(){
+    rebuildMapMarkers();
+    buildMetroSVG();
+    buildFilters();
+    renderList();
+  }
 
   // ---------- helpers ----------
   function byId(id){ return LOJAS.find(l => l.id === id); }
@@ -28,8 +91,16 @@
   }
 
   function linhaColor(id){ return (LINHAS[id] && LINHAS[id].cor) || "#0D2C54"; }
-  function linhaNome(id){ return (LINHAS[id] && LINHAS[id].nome) || "Linha"; }
+  function linhaNome(id){ return (LINHAS[id] && LINHAS[id].nome) || "Região"; }
   function linhaDia(id){ return (LINHAS[id] && LINHAS[id].dia) || ""; }
+  function linhaIdsOrdenadas(){ return Object.keys(LINHAS).map(Number).sort((a,b)=>a-b); }
+
+  function regionSelectHTML(currentId, selectId){
+    const opts = linhaIdsOrdenadas().map(lid =>
+      `<option value="${lid}" ${lid === currentId ? "selected" : ""}>${linhaDia(lid)} — ${linhaNome(lid)}</option>`
+    ).join("");
+    return `<select id="${selectId}" class="region-select">${opts}</select>`;
+  }
 
   // ---------- tabs ----------
   const tabs = document.querySelectorAll(".tab");
@@ -53,8 +124,13 @@
       maxZoom:19,
       attribution:'&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
     }).addTo(map);
-
     markersLayer = L.layerGroup().addTo(map);
+    rebuildMapMarkers();
+  }
+
+  function rebuildMapMarkers(){
+    if(!markersLayer) return;
+    markersLayer.clearLayers();
     LOJAS.forEach(loja => {
       const color = linhaColor(loja.linha);
       const icon = L.divIcon({
@@ -74,24 +150,21 @@
       marker.addTo(markersLayer);
     });
 
-    // legend
     const legend = document.getElementById("map-legend");
-    legend.innerHTML = '<div class="legend-title">Linhas / dias</div>' +
-      Object.entries(LINHAS).map(([id,l]) =>
-        `<div class="legend-row"><span class="legend-dot" style="background:${l.cor}"></span>${l.nome} · ${l.dia}</div>`
+    legend.innerHTML = '<div class="legend-title">Regiões / dias</div>' +
+      linhaIdsOrdenadas().map(lid =>
+        `<div class="legend-row"><span class="legend-dot" style="background:${linhaColor(lid)}"></span>${linhaNome(lid)} · ${linhaDia(lid)}</div>`
       ).join("");
   }
 
   // ==========================================================
   // REGIÃO — uma linha vertical por região/dia da semana, estações = lojas
-  // Cores iguais às usadas no mapa (mesma região = mesma cor)
   // ==========================================================
   function buildMetroSVG(){
-    const linhaIds = Object.keys(LINHAS).map(Number).sort((a,b)=>a-b);
     const holder = document.getElementById("metro-svg-holder");
     holder.innerHTML = "";
 
-    linhaIds.forEach(lid => {
+    linhaIdsOrdenadas().forEach(lid => {
       const color = linhaColor(lid);
       const stations = LOJAS.filter(l => l.linha === lid).sort((a,b)=>a.ordemRota-b.ordemRota);
 
@@ -100,25 +173,27 @@
       const topPad = 70;
       const bottomPad = 20;
       const railX = 34;
-      const height = topPad + (stations.length - 1) * stationGap + bottomPad;
+      const height = topPad + Math.max(stations.length - 1, 0) * stationGap + bottomPad;
 
       let svg = `<svg viewBox="0 0 ${width} ${height}" xmlns="http://www.w3.org/2000/svg" font-family="inherit">`;
       svg += `<text x="0" y="18" class="metro-day" fill="${color}">${linhaDia(lid)}</text>`;
       svg += `<text x="0" y="40" class="metro-line-title" fill="${color}">${linhaNome(lid)}</text>`;
 
-      const railTop = topPad;
-      const railBottom = topPad + (stations.length - 1) * stationGap;
-      svg += `<line x1="${railX}" y1="${railTop}" x2="${railX}" y2="${railBottom}" stroke="${color}" stroke-width="7" stroke-linecap="round"/>`;
+      if(stations.length){
+        const railTop = topPad;
+        const railBottom = topPad + (stations.length - 1) * stationGap;
+        svg += `<line x1="${railX}" y1="${railTop}" x2="${railX}" y2="${railBottom}" stroke="${color}" stroke-width="7" stroke-linecap="round"/>`;
 
-      stations.forEach((s, i) => {
-        const y = topPad + i * stationGap;
-        const r = 8 + Math.min(s.gravamesMercado||0, 20) * 0.35;
-        svg += `<circle cx="${railX}" cy="${y}" r="${r}" fill="#ffffff" stroke="${color}" stroke-width="5" data-store="${s.id}" class="metro-station" style="cursor:pointer"/>`;
-        const textX = railX + 26;
-        const shortName = s.nome.length > 30 ? s.nome.slice(0,29)+"…" : s.nome;
-        svg += `<text x="${textX}" y="${y-4}" class="metro-station-label" data-store="${s.id}" style="cursor:pointer">${shortName}</text>`;
-        svg += `<text x="${textX}" y="${y+13}" class="metro-station-sub">${s.endereco}</text>`;
-      });
+        stations.forEach((s, i) => {
+          const y = topPad + i * stationGap;
+          const r = 8 + Math.min(s.gravamesMercado||0, 20) * 0.35;
+          svg += `<circle cx="${railX}" cy="${y}" r="${r}" fill="#ffffff" stroke="${color}" stroke-width="5" data-store="${s.id}" class="metro-station" style="cursor:pointer"/>`;
+          const textX = railX + 26;
+          const shortName = s.nome.length > 30 ? s.nome.slice(0,29)+"…" : s.nome;
+          svg += `<text x="${textX}" y="${y-4}" class="metro-station-label" data-store="${s.id}" style="cursor:pointer">${shortName}</text>`;
+          svg += `<text x="${textX}" y="${y+13}" class="metro-station-sub">${s.endereco}</text>`;
+        });
+      }
 
       svg += `</svg>`;
 
@@ -139,7 +214,7 @@
   function buildFilters(){
     const wrap = document.getElementById("linha-filters");
     const chips = [{id:"all", label:"Todas"}].concat(
-      Object.entries(LINHAS).map(([id,l]) => ({id, label:l.dia.split("-")[0]}))
+      linhaIdsOrdenadas().map(lid => ({id:String(lid), label:linhaDia(lid).split("-")[0]}))
     );
     wrap.innerHTML = "";
     chips.forEach(c => {
@@ -161,7 +236,7 @@
     const list = document.getElementById("store-list");
     list.innerHTML = "";
 
-    const linhaIds = Object.keys(LINHAS).map(Number).sort((a,b)=>a-b)
+    const linhaIds = linhaIdsOrdenadas()
       .filter(lid => activeLinhaFilter === "all" || String(lid) === String(activeLinhaFilter));
 
     let anyResults = false;
@@ -177,9 +252,9 @@
       if(items.length === 0) return;
       anyResults = true;
 
+      const color = linhaColor(lid);
       const section = document.createElement("div");
       section.className = "list-section";
-      const color = linhaColor(lid);
       section.innerHTML = `
         <div class="list-section-header" style="border-left-color:${color}">
           <span class="list-section-day">${linhaDia(lid)}</span>
@@ -198,7 +273,8 @@
             <div class="store-card-tags">
               <span class="tag">${loja.porte || ""}</span>
             </div>
-          </div>`;
+          </div>
+          <button class="move-btn" data-move="${loja.id}" title="Mover para outro dia">⇄</button>`;
         cardsWrap.appendChild(card);
       });
       section.appendChild(cardsWrap);
@@ -215,6 +291,35 @@
       e.stopPropagation();
       toggleSelect(el.getAttribute("data-check"));
     }));
+    list.querySelectorAll("[data-move]").forEach(el => el.addEventListener("click", (e) => {
+      e.stopPropagation();
+      openMoveInline(el.getAttribute("data-move"), el);
+    }));
+  }
+
+  // quick inline move popover from the list card's ⇄ button
+  let openMovePopover = null;
+  function openMoveInline(storeId, anchorEl){
+    if(openMovePopover){ openMovePopover.remove(); openMovePopover = null; }
+    const loja = byId(storeId);
+    if(!loja) return;
+    const pop = document.createElement("div");
+    pop.className = "move-popover";
+    pop.innerHTML = `<div class="move-popover-title">Mover para outro dia</div>${regionSelectHTML(loja.linha, "inline-move-select")}`;
+    anchorEl.parentElement.appendChild(pop);
+    openMovePopover = pop;
+    const select = pop.querySelector("#inline-move-select");
+    select.addEventListener("change", async () => {
+      await moveStoreToLinha(storeId, Number(select.value));
+      pop.remove();
+      openMovePopover = null;
+    });
+    document.addEventListener("click", function closeOnce(e){
+      if(!pop.contains(e.target) && e.target !== anchorEl){
+        pop.remove(); openMovePopover = null;
+        document.removeEventListener("click", closeOnce);
+      }
+    }, {capture:true});
   }
 
   document.getElementById("search-input").addEventListener("input", (e) => {
@@ -250,7 +355,7 @@
   });
 
   // ==========================================================
-  // STORE DETAIL SHEET
+  // STORE DETAIL SHEET (usado pelo Mapa, Região e Lojas)
   // ==========================================================
   const sheet = document.getElementById("store-sheet");
   const sheetBackdrop = document.getElementById("sheet-backdrop");
@@ -271,10 +376,19 @@
         <a class="link-btn" href="${mapsSearchUrl(loja)}" target="_blank" rel="noopener">Abrir no Google Maps</a>
         <a class="link-btn alt" href="https://waze.com/ul?q=${encodeURIComponent(loja.enderecoCompleto)}&navigate=yes" target="_blank" rel="noopener">Abrir no Waze</a>
       </div>
-      <button class="ghost-btn" id="sheet-toggle-route" style="width:100%;color:var(--navy);border-color:var(--line);padding:11px;border-radius:10px;font-size:13px;">
+      <div class="move-field">
+        <label for="sheet-move-select">Mover esta loja para outra região / dia</label>
+        ${regionSelectHTML(loja.linha, "sheet-move-select")}
+      </div>
+      <button class="ghost-btn" id="sheet-toggle-route" style="width:100%;color:var(--navy);border-color:var(--line);padding:11px;border-radius:10px;font-size:13px;margin-top:10px;">
         ${selected.has(loja.id) ? "Remover da rota do dia" : "Adicionar à rota do dia"}
       </button>
+      ${!usingSupabase ? '<div class="offline-note">Supabase não configurado: mudanças de região ficam só nesta sessão. Veja config.js.</div>' : ""}
     `;
+    document.getElementById("sheet-move-select").addEventListener("change", async (e) => {
+      await moveStoreToLinha(loja.id, Number(e.target.value));
+      closeSheet();
+    });
     document.getElementById("sheet-toggle-route").addEventListener("click", () => {
       toggleSelect(loja.id);
       closeSheet();
@@ -300,14 +414,17 @@
   // ==========================================================
   // INIT
   // ==========================================================
-  initMap();
-  buildMetroSVG();
-  buildFilters();
-  renderList();
+  (async function init(){
+    await loadData();
+    pingSupabase();
+    initMap();
+    buildMetroSVG();
+    buildFilters();
+    renderList();
 
-  // first-time help
-  if(!localStorage.getItem("rotaleste_seen")){
-    setTimeout(() => { helpSheet.classList.add("show"); helpBackdrop.classList.add("show"); }, 400);
-    localStorage.setItem("rotaleste_seen","1");
-  }
+    if(!localStorage.getItem("lojasgcm_seen")){
+      setTimeout(() => { helpSheet.classList.add("show"); helpBackdrop.classList.add("show"); }, 400);
+      localStorage.setItem("lojasgcm_seen","1");
+    }
+  })();
 })();
