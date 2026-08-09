@@ -1,11 +1,12 @@
 (function(){
   "use strict";
 
-  // ---------- state (mutable — populated from Supabase or fallback) ----------
+  // ---------- state (mutable — populada a partir do Supabase ou do fallback) ----------
   let LOJAS = [];
   let LINHAS = {};
   let usingSupabase = false;
   let supabase = null;
+  let supabaseStatus = { state: "not_configured", detail: "" }; // not_configured | ok | empty | error
 
   const selected = new Set();      // ids selected for custom route
   let activeLinhaFilter = "all";
@@ -14,15 +15,24 @@
   // ---------- Supabase / data loading ----------
   async function loadData(){
     const cfg = window.SUPABASE_CONFIG || {};
-    if(cfg.url && cfg.anonKey && window.supabase){
+
+    if(!window.supabase){
+      supabaseStatus = { state:"error", detail:"Biblioteca do Supabase não carregou (verifique a internet ou o CDN)." };
+    } else if(!cfg.url || !cfg.anonKey){
+      supabaseStatus = { state:"not_configured", detail:"config.js está sem url/anonKey." };
+    } else {
       try{
         supabase = window.supabase.createClient(cfg.url, cfg.anonKey);
         const [{data: regioes, error: e1}, {data: lojas, error: e2}] = await Promise.all([
           supabase.from("regioes").select("*").order("ordem"),
           supabase.from("lojas").select("*")
         ]);
-        if(e1 || e2) throw (e1 || e2);
-        if(regioes && regioes.length && lojas && lojas.length){
+        if(e1 || e2){
+          const err = e1 || e2;
+          supabaseStatus = { state:"error", detail: (err.message || String(err)) + (err.code ? " (código " + err.code + ")" : "") };
+        } else if(!regioes || !regioes.length || !lojas || !lojas.length){
+          supabaseStatus = { state:"empty", detail: `regioes: ${regioes ? regioes.length : 0} linhas, lojas: ${lojas ? lojas.length : 0} linhas.` };
+        } else {
           LINHAS = {};
           regioes.forEach(r => { LINHAS[r.id] = { nome: r.nome, cor: r.cor, dia: r.dia }; });
           LOJAS = lojas.map(l => ({
@@ -32,17 +42,47 @@
             zona: l.zona, lat: l.lat, lng: l.lng, linha: l.linha, ordemRota: l.ordem_rota
           }));
           usingSupabase = true;
+          supabaseStatus = { state:"ok", detail:"" };
           return;
         }
       }catch(err){
-        console.warn("Supabase indisponível, usando dados locais.", err);
+        supabaseStatus = { state:"error", detail: (err && err.message) || String(err) };
       }
     }
+
+    console.warn("Supabase indisponível, usando dados locais.", supabaseStatus);
     // fallback: dados locais embutidos (data.js)
     LINHAS = FALLBACK_DATA.linhas;
     LOJAS = FALLBACK_DATA.lojas;
     usingSupabase = false;
   }
+
+  function statusBannerHTML(){
+    if(supabaseStatus.state === "ok") return "";
+    const msgs = {
+      not_configured: "Supabase não configurado — usando dados locais (mudanças de dia não são salvas). Preencha config.js.",
+      empty: "Supabase conectou, mas as tabelas estão vazias — rode supabase/schema.sql e depois supabase/seed.sql no SQL Editor. " + supabaseStatus.detail,
+      error: "Não foi possível ler o Supabase — usando dados locais. Detalhe: " + supabaseStatus.detail
+    };
+    return `<div class="status-banner" id="status-banner">${msgs[supabaseStatus.state] || "Supabase indisponível."} <button id="status-banner-close">✕</button></div>`;
+  }
+
+  function renderStatusBanner(){
+    const holder = document.getElementById("status-banner-holder");
+    const mainEl = document.querySelector("main");
+    if(!holder) return;
+    holder.innerHTML = statusBannerHTML();
+    const closeBtn = document.getElementById("status-banner-close");
+    if(closeBtn) closeBtn.addEventListener("click", () => {
+      holder.innerHTML = "";
+      if(mainEl) mainEl.style.top = "104px";
+    });
+    requestAnimationFrame(() => {
+      const h = holder.offsetHeight;
+      if(mainEl) mainEl.style.top = (104 + h) + "px";
+    });
+  }
+
 
   // ---------- ping (mantém o projeto Supabase free ativo, sem pausar) ----------
   async function pingSupabase(){
@@ -383,7 +423,11 @@
       <button class="ghost-btn" id="sheet-toggle-route" style="width:100%;color:var(--navy);border-color:var(--line);padding:11px;border-radius:10px;font-size:13px;margin-top:10px;">
         ${selected.has(loja.id) ? "Remover da rota do dia" : "Adicionar à rota do dia"}
       </button>
-      ${!usingSupabase ? '<div class="offline-note">Supabase não configurado: mudanças de região ficam só nesta sessão. Veja config.js.</div>' : ""}
+      ${!usingSupabase ? `<div class="offline-note">${
+        supabaseStatus.state === "empty" ? "Tabelas do Supabase vazias (rode o seed.sql). Mudanças ficam só nesta sessão."
+        : supabaseStatus.state === "error" ? "Erro ao conectar no Supabase (" + supabaseStatus.detail + "). Mudanças ficam só nesta sessão."
+        : "Supabase não configurado. Mudanças de região ficam só nesta sessão. Veja config.js."
+      }</div>` : ""}
     `;
     document.getElementById("sheet-move-select").addEventListener("change", async (e) => {
       await moveStoreToLinha(loja.id, Number(e.target.value));
@@ -416,6 +460,7 @@
   // ==========================================================
   (async function init(){
     await loadData();
+    renderStatusBanner();
     pingSupabase();
     initMap();
     buildMetroSVG();
